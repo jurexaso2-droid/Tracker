@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Viewport set for perfect mobile scaling -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Trace Mobile</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --input-bg: #334155;
+            --text-color: #f8fafc;
+            --accent: #3b82f6;     /* Blue */
+            --success: #22c55e;    /* Green */
+            --danger: #ef4444;     /* Red */
+            --warning: #f59e0b;    /* Orange */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden; /* Prevent scroll on main body */
+        }
+
+        /* HEADER */
+        header {
+            background: #020617;
+            padding: 15px;
+            text-align: center;
+            border-bottom: 1px solid #334155;
+            flex-shrink: 0;
+            z-index: 2000;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+        
+        h1 { margin: 0; font-size: 1.2rem; font-weight: 700; letter-spacing: 1px; color: var(--accent); }
+
+        /* MAIN APP AREA */
+        #app-container {
+            flex: 1;
+            position: relative;
+            overflow-y: auto; /* Allow scrolling inside views if needed */
+        }
+
+        /* VIEWS (Screens) */
+        .view {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100%;
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            background: var(--bg-color);
+        }
+
+        .view.active { display: flex; }
+
+        /* Map View Specifics */
+        #view-tracker { padding: 0; position: relative; }
+        #map { width: 100%; height: 100%; z-index: 1; }
+
+        /* CARDS */
+        .card {
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 380px; /* Mobile width constraint */
+            text-align: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            border: 1px solid #334155;
+            margin-bottom: 20px;
+        }
+
+        h2 { margin-top: 0; color: white; font-size: 1.5rem; }
+        p { color: #94a3b8; font-size: 1rem; line-height: 1.5; margin-bottom: 20px; }
+
+        /* BUTTONS - Large & Touch Friendly */
+        button {
+            width: 100%;
+            padding: 16px; /* Fat buttons for fingers */
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+        button:active { transform: scale(0.96); opacity: 0.9; }
+        
+        .btn-primary { background: var(--accent); color: white; box-shadow: 0 4px 0 #2563eb; }
+        .btn-success { background: var(--success); color: white; box-shadow: 0 4px 0 #16a34a; }
+        .btn-danger { background: var(--danger); color: white; box-shadow: 0 4px 0 #dc2626; }
+        .btn-outline { background: transparent; border: 2px solid #475569; color: #cbd5e1; }
+
+        /* INPUTS - Mobile Optimized */
+        input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 14px;
+            margin: 8px 0;
+            background: var(--input-bg);
+            border: 1px solid #475569;
+            border-radius: 10px;
+            color: white;
+            font-size: 16px; /* Prevents iOS zoom */
+            box-sizing: border-box;
+            outline: none;
+        }
+        input:focus { border-color: var(--accent); }
+
+        /* STATUS BAR */
+        #status-bar {
+            position: fixed;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.95);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            white-space: nowrap;
+            display: none;
+            z-index: 3000;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            border: 1px solid #334155;
+        }
+
+        /* MANUAL INPUT AREA */
+        .manual-box {
+            background: #0f172a;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 15px;
+            text-align: left;
+            border: 1px solid #334155;
+            display: none; /* Hidden by default */
+        }
+        .input-row { display: flex; gap: 10px; }
+        label { font-size: 0.8rem; color: #94a3b8; margin-left: 2px; }
+
+        /* Link Box */
+        .link-box {
+            background: #020617;
+            border: 1px dashed #475569;
+            color: #acc8e5;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 15px 0;
+            font-size: 0.9rem;
+            user-select: all;
+        }
+
+        /* ANIMATIONS */
+        .pulse-dot {
+            width: 12px; height: 12px;
+            background: var(--success);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+            animation: pulse 1.5s infinite;
+            margin-right: 8px;
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
+        /* Modal for Tracker */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 4000;
+            display: none;
+            align-items: center; justify-content: center;
+            padding: 20px; box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>📡 Trace Mobile</h1>
+</header>
+
+<div id="app-container">
+    
+    <!-- VIEW 1: SETUP (Home Screen) -->
+    <div id="view-setup" class="view active">
+        <div class="card">
+            <h2>Select Mode</h2>
+            <p>Are you tracking someone, or being tracked?</p>
+            
+            <button class="btn-primary" onclick="app.createSession()">
+                👁️ I am the Tracker
+            </button>
+            <p style="font-size:0.8rem; margin: 10px 0;">(Use this on your phone)</p>
+            
+            <div style="height: 1px; background: #334155; margin: 20px 0;"></div>
+            
+            <p style="font-size: 0.9rem; color: #64748b;">To track your brother, click above. Send the generated link to his old phone.</p>
+        </div>
+    </div>
+
+    <!-- VIEW 2: TRACKER (Map) -->
+    <div id="view-tracker" class="view">
+        <div id="map"></div>
+        
+        <!-- Bottom Floating Controls -->
+        <div style="position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 90%; z-index: 1000; text-align: center;">
+            <div class="card" style="margin: 0 auto; padding: 15px; width: 100%; box-sizing: border-box;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="text-align: left;">
+                        <div style="font-weight: bold; color: white;">Target Status</div>
+                        <div id="tracker-status-text" style="font-size: 0.8rem; color: #94a3b8;">Waiting for signal...</div>
+                    </div>
+                    <button onclick="document.getElementById('share-modal').style.display='flex'" style="width: auto; padding: 8px 15px; font-size: 0.9rem; margin: 0; background: #334155;">
+                        🔗 Link
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Share Link Modal -->
+        <div id="share-modal" class="modal">
+            <div class="card">
+                <h3>📲 Connection Link</h3>
+                <p>Open this link on the <b>Brother's Phone</b>:</p>
+                <div class="link-box" id="share-link">Generating...</div>
+                <button class="btn-primary" onclick="app.copyLink()">Copy Link</button>
+                <button class="btn-danger" onclick="document.getElementById('share-modal').style.display='none'" style="margin-top: 15px; background: transparent; border: 1px solid #ef4444; color: #ef4444; box-shadow:none;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIEW 3: TARGET (Brother's Phone) -->
+    <div id="view-target" class="view">
+        <div class="card">
+            <div style="font-size: 3rem; margin-bottom: 10px;">🛰️</div>
+            <h2>GPS Transmitter</h2>
+            <p id="target-msg">Ready to share location.</p>
+            
+            <!-- Main GPS Controls -->
+            <button id="btn-start" class="btn-success" onclick="app.startSharing()">Start Tracking</button>
+            <button id="btn-stop" class="btn-danger" onclick="app.stopSharing()" style="display:none;">Stop Tracking</button>
+
+            <!-- Manual/Custom Location Section -->
+            <div style="margin-top: 25px;">
+                <button class="btn-outline" onclick="app.toggleManual()" style="font-size: 0.9rem; padding: 10px;">
+                    🛠️ Manual / Custom Location
+                </button>
+                
+                <div id="manual-area" class="manual-box">
+                    <p style="margin: 0 0 10px 0; font-size: 0.85rem; color: var(--accent);">Enter Custom Coordinates:</p>
+                    
+                    <div class="input-row">
+                        <div style="flex:1">
+                            <label>Latitude</label>
+                            <input type="number" id="manual-lat" placeholder="14.5..." step="any">
+                        </div>
+                        <div style="flex:1">
+                            <label>Longitude</label>
+                            <input type="number" id="manual-lng" placeholder="121.0..." step="any">
+                        </div>
+                    </div>
+                    
+                    <button class="btn-primary" onclick="app.sendManualLocation()" style="margin-top: 10px; font-size: 1rem; padding: 12px; background: #475569; box-shadow: none;">
+                        Send Custom Location
+                    </button>
+                    <div style="text-align:center; margin-top:5px;">
+                        <small style="color:#64748b; font-size: 0.7rem;">Use this if GPS is stuck</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="debug-log" style="color: #64748b; font-size: 0.7rem; margin-top: 20px; font-family: monospace;"></div>
+    </div>
+
+    <div id="status-bar">Initializing...</div>
+
+</div>
+
+<!-- Libraries -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+
+<script>
+/* 
+ * TRACE MOBILE v3 (Mobile Optimized + Manual Mode)
+ */
+
+const App = {
+    // SECURE BROKER CONFIGURATION
+    mqttConfig: {
+        host: "broker.emqx.io",
+        port: 8084,
+        path: "/mqtt",
+        useSSL: true,
+        clientId: "trace_mobile_" + Math.random().toString(16).substr(2, 8)
+    },
+    
+    client: null,
+    sessionId: null,
+    role: null, 
+    map: null,
+    marker: null,
+    watchId: null,
+
+    init: function() {
+        // Prevent screen sleep if possible (hacky for web)
+        if (navigator.wakeLock) { try { navigator.wakeLock.request('screen'); } catch(e){} }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        this.sessionId = urlParams.get('id');
+
+        if (this.sessionId) {
+            // TARGET MODE
+            this.role = 'target';
+            this.showView('view-target');
+            this.connectMqtt();
+        } else {
+            // SETUP MODE
+            this.role = 'setup';
+            this.showView('view-setup');
+        }
+    },
+
+    createSession: function() {
+        this.sessionId = Math.random().toString(36).substr(2, 9);
+        this.role = 'tracker';
+        
+        // Build Link
+        const link = `${window.location.protocol}//${window.location.host}${window.location.pathname}?id=${this.sessionId}`;
+        document.getElementById('share-link').innerText = link;
+        
+        this.showView('view-tracker');
+        document.getElementById('share-modal').style.display = 'flex'; 
+        
+        this.initMap();
+        this.connectMqtt();
+    },
+
+    // --- MQTT CONNECTION ---
+    connectMqtt: function() {
+        this.showStatus("Connecting to cloud...", true);
+        
+        try {
+            this.client = new Paho.MQTT.Client(
+                this.mqttConfig.host, 
+                this.mqttConfig.port, 
+                this.mqttConfig.path,
+                this.mqttConfig.clientId
+            );
+        } catch(e) { console.error(e); return; }
+
+        this.client.onConnectionLost = (res) => {
+            if (res.errorCode !== 0) {
+                console.log("Connection lost:", res.errorMessage);
+                this.showStatus("Reconnecting...", true);
+                setTimeout(() => this.connectMqtt(), 3000);
+            }
+        };
+
+        this.client.onMessageArrived = (msg) => {
+            if (this.role === 'tracker') this.handleMessage(msg);
+        };
+
+        const options = {
+            useSSL: this.mqttConfig.useSSL,
+            timeout: 10,
+            onSuccess: () => {
+                this.showStatus("Connected");
+                this.onConnect();
+            },
+            onFailure: (ctx) => {
+                this.showStatus("Connection Failed. Retrying...", true);
+                setTimeout(() => this.connectMqtt(), 5000);
+            }
+        };
+
+        this.client.connect(options);
+    },
+
+    onConnect: function() {
+        const topic = `trace_gps/${this.sessionId}`;
+        
+        if (this.role === 'tracker') {
+            this.client.subscribe(topic);
+            this.showStatus("Waiting for brother's signal...");
+        } else {
+            document.getElementById('target-msg').innerHTML = "<span style='color:var(--success)'>● Connected</span>. Press Start.";
+        }
+    },
+
+    // --- TRACKER LOGIC ---
+    handleMessage: function(message) {
+        try {
+            const data = JSON.parse(message.payloadString);
+            const lat = parseFloat(data.lat);
+            const lng = parseFloat(data.lng);
+            const type = data.type || "GPS"; // "GPS" or "Manual"
+
+            if (!this.map) return;
+            const latLng = [lat, lng];
+
+            // Create or Update Marker
+            if (!this.marker) {
+                this.marker = L.marker(latLng).addTo(this.map);
+                this.map.setView(latLng, 16);
+            } else {
+                this.marker.setLatLng(latLng);
+                this.map.panTo(latLng);
+            }
+
+            // Google Maps Navigation URL
+            const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+
+            // Custom popup content
+            this.marker.bindPopup(`
+                <div style="text-align:center; min-width:150px;">
+                    <b style="font-size:1.1rem">📍 Brother Found</b><br>
+                    <small style="color:#666">${type} Update</small><br><br>
+                    <a href="${navUrl}" target="_blank" 
+                       style="display:block; padding:10px; background:#3b82f6; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">
+                       Navigate Here 🚀
+                    </a>
+                </div>
+            `).openPopup();
+
+            // Update status text
+            document.getElementById('tracker-status-text').innerHTML = 
+                `<span style="color:${type === 'Manual' ? '#f59e0b' : '#22c55e'}">● Last received: ${new Date().toLocaleTimeString()}</span>`;
+
+            // If setup modal is open, close it
+            document.getElementById('share-modal').style.display = 'none';
+
+        } catch (e) { console.error(e); }
+    },
+
+    initMap: function() {
+        this.map = L.map('map', { zoomControl: false }).setView([0, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: ''
+        }).addTo(this.map);
+        L.control.zoom({ position: 'topright' }).addTo(this.map);
+    },
+
+    // --- TARGET LOGIC (GPS) ---
+    startSharing: function() {
+        if (!navigator.geolocation) return alert("No GPS found on this device.");
+
+        document.getElementById('btn-start').style.display = 'none';
+        document.getElementById('btn-stop').style.display = 'block';
+        document.getElementById('target-msg').innerHTML = "<span class='pulse-dot'></span> Transmitting Location...";
+
+        this.watchId = navigator.geolocation.watchPosition(
+            (pos) => {
+                this.sendLocation(pos.coords.latitude, pos.coords.longitude, "GPS");
+                
+                // Auto-fill manual inputs for reference
+                document.getElementById('manual-lat').value = pos.coords.latitude.toFixed(6);
+                document.getElementById('manual-lng').value = pos.coords.longitude.toFixed(6);
+            }, 
+            (err) => {
+                alert("GPS Signal Weak or Denied.");
+                this.stopSharing();
+            }, 
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+        );
+    },
+
+    stopSharing: function() {
+        if (this.watchId) navigator.geolocation.clearWatch(this.watchId);
+        document.getElementById('btn-start').style.display = 'block';
+        document.getElementById('btn-stop').style.display = 'none';
+        document.getElementById('target-msg').innerHTML = "<span style='color:var(--warning)'>Paused</span>";
+        this.showStatus("Tracking Paused");
+    },
+
+    // --- MANUAL / CUSTOM LOCATION ---
+    toggleManual: function() {
+        const box = document.getElementById('manual-area');
+        box.style.display = (box.style.display === 'block') ? 'none' : 'block';
+    },
+
+    sendManualLocation: function() {
+        const lat = parseFloat(document.getElementById('manual-lat').value);
+        const lng = parseFloat(document.getElementById('manual-lng').value);
+
+        if (isNaN(lat) || isNaN(lng)) {
+            alert("Please enter valid Latitude and Longitude.");
+            return;
+        }
+
+        this.sendLocation(lat, lng, "Manual");
+        alert("Custom location sent to tracker!");
+    },
+
+    sendLocation: function(lat, lng, type) {
+        if (!this.client || !this.client.isConnected()) return;
+
+        const payload = JSON.stringify({ lat: lat, lng: lng, type: type, t: Date.now() });
+        const message = new Paho.MQTT.Message(payload);
+        message.destinationName = `trace_gps/${this.sessionId}`;
+        this.client.send(message);
+
+        // Debug info on screen
+        document.getElementById('debug-log').innerText = `SENT [${type}]: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    },
+
+    // --- UTILS ---
+    showView: function(id) {
+        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (id === 'view-tracker' && this.map) setTimeout(() => this.map.invalidateSize(), 100);
+    },
+
+    copyLink: function() {
+        const text = document.getElementById('share-link').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            this.showStatus("Link Copied!", true);
+            setTimeout(() => document.getElementById('status-bar').style.display='none', 1500);
+        });
+    },
+
+    showStatus: function(msg, autoHide=false) {
+        const bar = document.getElementById('status-bar');
+        bar.style.display = 'block';
+        bar.innerText = msg;
+        if (autoHide || msg === "Connected") setTimeout(() => { bar.style.display = 'none'; }, 3000);
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => { app = App; app.init(); });
+</script>
+</body>
+</html>
